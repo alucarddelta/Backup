@@ -1,0 +1,17 @@
+{
+    "Setting":{
+      "ClearTextPass": "True"
+    },
+    "Primary":{
+      "IP": "127.0.0.1",
+      "User": "root",
+      "Pass": "Password",
+      "Loc": "/path/"
+    },
+    "Standby":{
+      "IP": "127.0.0.1",
+      "User": "root",
+      "Pass": "Password",
+      "Loc": "/path/"
+    }
+}
