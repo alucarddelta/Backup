@@ -13,9 +13,12 @@ from Crypto.Cipher import AES
 
 #### Logging ####
 
-logging.basicConfig(filename='log.txt', level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
-logging.basicConfig(filename='log.txt', level=logging.WARNING, format='%(asctime)s | %(levelname)s | %(message)s')
-logging.basicConfig(filename='log.txt', level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(message)s')
+logformat = "%(asctime)s | %(levelname)s | %(message)s"
+logging.basicConfig(filename='log.txt', level=logging.DEBUG, format=logformat)
+logging.basicConfig(filename='log.txt', level=logging.INFO, format=logformat)
+logging.basicConfig(filename='log.txt', level=logging.WARNING, format=logformat)
+logging.basicConfig(filename='log.txt', level=logging.ERROR, format=logformat)
+logging.basicConfig(filename='log.txt', level=logging.CRITICAL, format=logformat)
 
 #### Arg Check ####
 
@@ -29,12 +32,11 @@ def encrypt_val(clear_text):
     enc_secret = AES.new(MASTER_KEY[:32])
     tag_string = (str(clear_text) + (AES.block_size - len(str(clear_text)) % AES.block_size) * "\0")
     cipher_text = base64.b64encode(enc_secret.encrypt(tag_string))
-    exit(2)
     return cipher_text
 
 if args.password:
     ctpassword = args.password
-    outputpass = "Password generated " + encrypt_val(ctpassword).decode("utf-8")
+    outputpass = "Password generated: " + encrypt_val(ctpassword).decode("utf-8")
     print(outputpass)
     logging.info(outputpass)
     exit(0)
@@ -59,11 +61,14 @@ StbLoc = data["Standby"]["Loc"]
 CT = data["Setting"]["ClearTextPass"]
 def CTcheck(x):
     if x in ("True", "False"):
-        pass
+        logging.info("Clear Text: " + CT)
     else:
-        print("Config input error | Check Clear Text options are True or False.")
+        cterror = "Invalid Clear Text option | {} not a vailed input.".format(x)
+        logging.error(cterror)
+        print(cterror)
         exit(2)
     return
+
 CTcheck(CT)
 
 def decrypt_val(cipher_text):
@@ -71,8 +76,6 @@ def decrypt_val(cipher_text):
     raw_decrypted = dec_secret.decrypt(base64.b64decode(cipher_text))
     clear_val = raw_decrypted.decode().rstrip("\0")
     return clear_val
-
-    #.decode("utf-8")
 
 if CT == "True":
     PriPass = data["Primary"]["Pass"]
@@ -83,21 +86,24 @@ else:
     EnStbPass = data["Standby"]["Pass"]
     StbPass = decrypt_val(EnStbPass)
 
-#### Check Servers can be reached ####
+#### Ping Check def ####
 
 def IPcheck(SIP,ser):
     IPcommand = shlex.split("ping -c 1 " + SIP)
     IPprocess = subprocess.Popen(IPcommand, stdout=subprocess.PIPE)
     output, err = IPprocess.communicate()
-    logging.info(output)
-
+    output1 = output
     if IPprocess.poll() == 0:
-        IPstatus = ser + "PINGOK"
+        logging.info ("Ping to {} {} OK".format(ser, SIP))
     else:
-        IPstatus = ser + "PINGFAIL"
-    return(IPstatus)
+        ipfail= "Ping to {} {} Failed.".format(ser, SIP)
+        logging.error (ipfail)
+        logging.debug (output1)
+        print("{} | {}".format(ipfail, output1))
+        exit(2)
+    return
 
-#### Check Servers can be logged into ####
+#### SSH check Def ####
 
 def SSHCheck(SIP,SUN,SPASS,ser):
     try:
@@ -105,8 +111,10 @@ def SSHCheck(SIP,SUN,SPASS,ser):
         SSHclient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         SSHclient.connect(SIP, username=SUN, password=SPASS, timeout= 1)
         SSHclient.close()
+        logging.info ("SSH Connection to {} {} OK".format(ser, SIP))
         SSHstatus = ser + "SSHCOK"
     except Exception as e:
+        logging.error ("SSH Connection to {} {} Failed".format(ser, SIP))
         SSHstatus = ser + "SSHCFAIL"
     return(SSHstatus)
 
@@ -124,30 +132,12 @@ def SSHCheck(SIP,SUN,SPASS,ser):
 #else:
 #    print result
 
-#### Stage 1 Main ####
+#### Stage 1 Main - IP Check ####
 
-PriIPCS = IPcheck(PriIP, "Pri")
-StbIPCS = IPcheck(StbIP, "Stb")
+IPcheck(PriIP, "Pri")
+IPcheck(StbIP, "Stb")
 
-if PriIPCS == "PriPINGFAIL" and StbIPCS == "StbPINGFAIL":
-    serverstatus = "BothPingsFail"
-    print(serverstatus)
-    exit(2)
-
-if PriIPCS == "PriPINGOK" and StbIPCS == "StbPINGOK":
-    serverstatus = "SerPingsOK"
-    print(serverstatus)
-else:
-    if PriIPCS == "PriPINGFAIL":
-        serverstatus = "PriPingsFail"
-        print(serverstatus)
-        exit(1)
-    else:
-        serverstatus = "StbPingsFail"
-        print(serverstatus)
-        exit(1)
-
-#### Stage 2 Main ####
+#### Stage 2 Main - SSH check####
 
 PriCOMMAND = SSHCheck(PriIP,PriUser,PriPass, "Pri")
 StbCOMMAND = SSHCheck(StbIP,StbUser,StbPass, "Stb")
@@ -158,7 +148,8 @@ if PriCOMMAND == "PriSSHCFAIL" and StbCOMMAND == "StbSSHCFAIL":
     exit(2)
 
 if PriCOMMAND == "PriSSHCOK" and StbCOMMAND == "StbSSHCOK":
-    serverconnstatus = "SerSSHOK"
+    serverconnstatus = "SSH to both Servers Failed"
+    logging.critical(serverstatus)
     print(serverconnstatus)
     exit(0)
 else:
